@@ -1,0 +1,34 @@
+@import 'leaflet/dist/leaflet.css';
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    background-color: #F8F5EE;
+    color: #0B2C26;
+    background-image: radial-gradient(rgba(15, 62, 53, 0.03) 1px, transparent 0);
+    background-size: 24px 24px;
+    min-height: 100vh;
+  }
+}
+
+/* Custom Leaflet Sandpaper Popup Card - Giấy Dó Mỹ Thuật Thanh Nhã */
+.leaflet-popup.sandpaper-popup .leaflet-popup-content-wrapper {
+  background-color: #FCFAF5;
+  border: 1.5px solid #C5A059;
+  border-radius: 4px;
+  box-shadow: 0 10px 28px rgba(15, 62, 53, 0.2);
+  padding: 0;
+  color: #0F3E35;
+}
+
+.leaflet-popup.sandpaper-popup .leaflet-popup-content {
+  margin: 12px 14px;
+  line-height: 1.45;
+}
+
+.leaflet-popup.sandpaper-popup .leaflet-popup-tip {
+  background: #FCFAF5;
+  box-shadow: 0 4px 10px rgba(15, 62, 53, 0.15);
+}
