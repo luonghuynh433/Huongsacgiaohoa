@@ -348,7 +348,15 @@ export const GiftKitShowcase = () => {
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 shrink-0">
+              <div className="flex items-center gap-3 shrink-0 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => navigate('/custom-kit')}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-gold-dark hover:bg-gold text-white rounded-sm text-xs uppercase tracking-wider font-sans font-bold transition-all shadow-paper ring-1 ring-gold/40"
+                >
+                  <Box className="w-3.5 h-3.5 text-white" />
+                  <span>Tự Phối Bộ Kit 3 Miền</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => navigate('/minimap')}

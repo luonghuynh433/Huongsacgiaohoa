@@ -3,6 +3,7 @@ import { MainLayout } from './layouts/MainLayout';
 import { HomePage } from './pages/HomePage';
 import { SurveyPage } from './pages/SurveyPage';
 import { MinimapPage } from './pages/MinimapPage';
+import { CustomKitPage } from './pages/CustomKitPage';
 
 export function App() {
   return (
@@ -12,6 +13,7 @@ export function App() {
           <Route index element={<HomePage />} />
           <Route path="survey" element={<SurveyPage />} />
           <Route path="minimap" element={<MinimapPage />} />
+          <Route path="custom-kit" element={<CustomKitPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

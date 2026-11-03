@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { Leaf, Compass, FileText } from 'lucide-react';
+import { Leaf, Compass, FileText, Box } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { TeaAudioPlayer } from '@/components/audio/TeaAudioPlayer';
 
@@ -92,6 +92,30 @@ export const MainLayout = () => {
                 <>
                   <Compass className="w-4 h-4 text-gold/80" />
                   <span>Bản đồ</span>
+                  {isActive && (
+                    <motion.span
+                      layoutId="nav-underline"
+                      className="absolute bottom-0 left-2 right-2 h-[2px] bg-gold rounded-full"
+                    />
+                  )}
+                </>
+              )}
+            </NavLink>
+
+            <NavLink
+              to="/custom-kit"
+              className={({ isActive }) =>
+                `flex items-center gap-1.5 px-3 py-2 rounded-md transition-colors duration-200 relative font-sans text-xs uppercase tracking-wider ${
+                  isActive
+                    ? 'text-teal-deep font-bold'
+                    : 'text-teal-deep/70 hover:text-teal-deep'
+                }`
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <Box className="w-4 h-4 text-gold/80" />
+                  <span>Phối Bộ Kit</span>
                   {isActive && (
                     <motion.span
                       layoutId="nav-underline"
