@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, RefreshCw, Wand2, Package, CheckCircle, ArrowRight, ArrowUp } from 'lucide-react';
+import { Sparkles, RefreshCw, Wand2, Package, CheckCircle, ArrowRight, ArrowUp, ArrowLeftRight } from 'lucide-react';
 import { TEA_PACKETS_CATALOG } from '@/data/teaPacketsData';
 import { TeaPacketItem, KitOrderRecord } from '@/types/kit.types';
 import { CustomKitBox } from '@/components/kit/CustomKitBox';
@@ -17,6 +17,7 @@ export const CustomKitPage = () => {
 
   // Trạng thái kéo thả & tự động cuộn trang
   const [isDraggingAnyPacket, setIsDraggingAnyPacket] = useState(false);
+  const [draggedFromSlotIndex, setDraggedFromSlotIndex] = useState<number | null>(null);
   const [draggedPacketName, setDraggedPacketName] = useState<string | null>(null);
   const boxSectionRef = useRef<HTMLElement | null>(null);
   const isDraggingRef = useRef<boolean>(false);
@@ -31,6 +32,7 @@ export const CustomKitPage = () => {
   const stopAutoScroll = useCallback(() => {
     isDraggingRef.current = false;
     setIsDraggingAnyPacket(false);
+    setDraggedFromSlotIndex(null);
     setDraggedPacketName(null);
     lastClientYRef.current = null;
     if (animFrameRef.current) {
@@ -99,10 +101,11 @@ export const CustomKitPage = () => {
     };
   }, [scrollTick, stopAutoScroll]);
 
-  // Bắt đầu kéo gói trà: Kích hoạt tự cuộn và trượt nhẹ tới Hộp Quà nếu hộp đang ở trên khuất màn hình
+  // Bắt đầu kéo gói trà từ kho danh mục (bên dưới): Kích hoạt tự cuộn và trượt nhẹ tới Hộp Quà nếu hộp đang ở trên
   const handlePacketDragStart = (_e: React.DragEvent, packet: TeaPacketItem) => {
     isDraggingRef.current = true;
     setIsDraggingAnyPacket(true);
+    setDraggedFromSlotIndex(null);
     setDraggedPacketName(packet.name);
 
     if (boxSectionRef.current) {
@@ -111,6 +114,18 @@ export const CustomKitPage = () => {
         boxSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
     }
+
+    if (!animFrameRef.current) {
+      animFrameRef.current = requestAnimationFrame(scrollTick);
+    }
+  };
+
+  // Bắt đầu kéo gói trà từ TRONG HỘP: Cho phép đổi ngăn hoặc kéo ra ngoài để loại bỏ
+  const handleDragStartFromSlot = (_e: React.DragEvent, packet: TeaPacketItem, slotIndex: number) => {
+    isDraggingRef.current = true;
+    setIsDraggingAnyPacket(true);
+    setDraggedFromSlotIndex(slotIndex);
+    setDraggedPacketName(packet.name);
 
     if (!animFrameRef.current) {
       animFrameRef.current = requestAnimationFrame(scrollTick);
@@ -128,16 +143,33 @@ export const CustomKitPage = () => {
   });
 
   // Xử lý kéo thả gói trà vào đúng vị trí ngăn (slotIndex: 0, 1, 2)
-  const handleDropPacket = (slotIndex: number, packet: TeaPacketItem) => {
+  const handleDropPacket = (targetSlotIndex: number, packet: TeaPacketItem, fromSlotIndex?: number) => {
     stopAutoScroll();
+
+    // Trường hợp 1: Kéo đổi ngăn giữa các ngăn trong hộp
+    if (fromSlotIndex !== undefined) {
+      if (fromSlotIndex === targetSlotIndex) return;
+
+      setSlots((prev) => {
+        const next = [...prev];
+        const fromPacket = next[fromSlotIndex];
+        const toPacket = next[targetSlotIndex];
+        next[targetSlotIndex] = fromPacket;
+        next[fromSlotIndex] = toPacket; // Hoán đổi vị trí hoặc để trống nếu toPacket ban đầu là null
+        return next;
+      });
+      return;
+    }
+
+    // Trường hợp 2: Kéo từ kho danh trà bên dưới vào hộp
     setSlots((prev) => {
       const next = [...prev];
       // Nếu gói trà này đã ở ngăn khác, gỡ ở ngăn cũ
       const existingIdx = next.findIndex((p) => p?.id === packet.id);
-      if (existingIdx !== -1 && existingIdx !== slotIndex) {
+      if (existingIdx !== -1 && existingIdx !== targetSlotIndex) {
         next[existingIdx] = null;
       }
-      next[slotIndex] = packet;
+      next[targetSlotIndex] = packet;
       return next;
     });
   };
@@ -169,6 +201,7 @@ export const CustomKitPage = () => {
       next[slotIndex] = null;
       return next;
     });
+    stopAutoScroll();
   };
 
   // Làm trống toàn bộ hộp trà
@@ -202,10 +235,21 @@ export const CustomKitPage = () => {
               boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
             }}
           >
-            <ArrowUp className="w-4 h-4 text-[#E5B94E] animate-bounce" />
-            <span className="text-xs font-serif font-bold">
-              Đang kéo {draggedPacketName ? `"${draggedPacketName}"` : 'gói trà'} &bull; Rê chuột lên trên để trang tự cuộn tới Hộp Quà
-            </span>
+            {draggedFromSlotIndex !== null ? (
+              <>
+                <ArrowLeftRight className="w-4 h-4 text-[#E5B94E] animate-pulse" />
+                <span className="text-xs font-serif font-bold">
+                  Đang kéo {draggedPacketName ? `"${draggedPacketName}"` : 'gói trà'} &bull; Thả vào ngăn khác để đổi vị trí, hoặc kéo ra ngoài để loại bỏ
+                </span>
+              </>
+            ) : (
+              <>
+                <ArrowUp className="w-4 h-4 text-[#E5B94E] animate-bounce" />
+                <span className="text-xs font-serif font-bold">
+                  Đang kéo {draggedPacketName ? `"${draggedPacketName}"` : 'gói trà'} &bull; Rê chuột lên trên để trang tự cuộn tới Hộp Quà
+                </span>
+              </>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -262,11 +306,32 @@ export const CustomKitPage = () => {
           onRemovePacket={handleRemovePacket}
           onOpenOrderModal={() => setIsOrderModalOpen(true)}
           isDraggingAnyPacket={isDraggingAnyPacket}
+          draggedFromSlotIndex={draggedFromSlotIndex}
+          onDragStartFromSlot={handleDragStartFromSlot}
+          onDragEndFromSlot={stopAutoScroll}
         />
       </section>
 
       {/* 3. KHU VỰC DANH TRÀ 3 MIỀN ĐỂ KÉO THẢ */}
-      <section className="space-y-6 pt-4 border-t border-gold/25">
+      <section
+        onDragOver={(e) => {
+          if (draggedFromSlotIndex !== null) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+          }
+        }}
+        onDrop={(e) => {
+          if (draggedFromSlotIndex !== null) {
+            e.preventDefault();
+            handleRemovePacket(draggedFromSlotIndex);
+          }
+        }}
+        className={`space-y-6 pt-4 border-t border-gold/25 transition-all duration-300 rounded-sm p-3 ${
+          draggedFromSlotIndex !== null
+            ? 'bg-red-950/10 border-2 border-dashed border-red-400/50'
+            : ''
+        }`}
+      >
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -276,7 +341,9 @@ export const CustomKitPage = () => {
               </span>
             </div>
             <p className="text-xs text-teal-deep/75 font-serif italic">
-              Bao bì giấy mỹ thuật cao cấp in họa tiết phong cảnh đất nước, trọng lượng 50g/gói. Trang tự động cuộn khi bạn kéo gói trà.
+              {draggedFromSlotIndex !== null
+                ? '✨ Thả gói trà vào đây để loại bỏ khỏi hộp quà ✨'
+                : 'Bao bì giấy mỹ thuật cao cấp in họa tiết phong cảnh đất nước, trọng lượng 50g/gói. Trang tự động cuộn khi bạn kéo gói trà.'}
             </p>
           </div>
 

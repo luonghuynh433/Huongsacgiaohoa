@@ -1,13 +1,16 @@
 import React, { useState } from 'react';
-import { X, Sparkles, Plus, Palette, QrCode, ShieldCheck, Box } from 'lucide-react';
+import { X, Sparkles, Plus, Palette, QrCode, ShieldCheck, Box, GripVertical, Trash2, ArrowLeftRight } from 'lucide-react';
 import { TeaPacketItem } from '@/types/kit.types';
 
 interface CustomKitBoxProps {
   slots: (TeaPacketItem | null)[];
-  onDropPacket: (slotIndex: number, packet: TeaPacketItem) => void;
+  onDropPacket: (slotIndex: number, packet: TeaPacketItem, fromSlotIndex?: number) => void;
   onRemovePacket: (slotIndex: number) => void;
   onOpenOrderModal: () => void;
   isDraggingAnyPacket?: boolean;
+  draggedFromSlotIndex?: number | null;
+  onDragStartFromSlot?: (e: React.DragEvent, packet: TeaPacketItem, slotIndex: number) => void;
+  onDragEndFromSlot?: () => void;
 }
 
 export const CustomKitBox: React.FC<CustomKitBoxProps> = ({
@@ -16,15 +19,21 @@ export const CustomKitBox: React.FC<CustomKitBoxProps> = ({
   onRemovePacket,
   onOpenOrderModal,
   isDraggingAnyPacket = false,
+  draggedFromSlotIndex = null,
+  onDragStartFromSlot,
+  onDragEndFromSlot,
 }) => {
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [localDraggedSlot, setLocalDraggedSlot] = useState<number | null>(null);
+  const [isOverRemoveZone, setIsOverRemoveZone] = useState(false);
 
+  const activeDraggedSlot = draggedFromSlotIndex ?? localDraggedSlot;
   const selectedCount = slots.filter(Boolean).length;
   const isComplete = selectedCount === 3;
 
   const handleDragOver = (e: React.DragEvent, index: number) => {
     e.preventDefault();
-    e.dataTransfer.dropEffect = 'copy';
+    e.dataTransfer.dropEffect = 'move';
     setDragOverIndex(index);
   };
 
@@ -40,12 +49,31 @@ export const CustomKitBox: React.FC<CustomKitBoxProps> = ({
     try {
       const dataStr = e.dataTransfer.getData('application/json');
       if (dataStr) {
-        const packet: TeaPacketItem = JSON.parse(dataStr);
-        onDropPacket(index, packet);
+        const parsed = JSON.parse(dataStr);
+        if (parsed.fromSlotIndex !== undefined) {
+          onDropPacket(index, parsed.packet, parsed.fromSlotIndex);
+        } else {
+          onDropPacket(index, parsed);
+        }
       }
     } catch (err) {
       console.error('Lỗi nhận diện gói trà thả vào hộp:', err);
     }
+  };
+
+  const handleSlotDragStart = (e: React.DragEvent, packet: TeaPacketItem, slotIdx: number) => {
+    e.stopPropagation();
+    e.dataTransfer.setData('application/json', JSON.stringify({ packet, fromSlotIndex: slotIdx }));
+    e.dataTransfer.setData('text/plain', packet.id);
+    e.dataTransfer.effectAllowed = 'move';
+    setLocalDraggedSlot(slotIdx);
+    onDragStartFromSlot?.(e, packet, slotIdx);
+  };
+
+  const handleSlotDragEnd = () => {
+    setLocalDraggedSlot(null);
+    setIsOverRemoveZone(false);
+    onDragEndFromSlot?.();
   };
 
   return (
@@ -135,10 +163,19 @@ export const CustomKitBox: React.FC<CustomKitBoxProps> = ({
                   }`}
                 >
                   {packet ? (
-                    <div className="relative z-10">
+                    <div
+                      draggable={true}
+                      onDragStart={(e) => handleSlotDragStart(e, packet, idx)}
+                      onDragEnd={handleSlotDragEnd}
+                      className={`relative z-10 cursor-grab active:cursor-grabbing group/slot transition-opacity duration-200 ${
+                        activeDraggedSlot === idx ? 'opacity-40' : 'opacity-100'
+                      }`}
+                      title="Kéo gói trà này để đổi sang ngăn khác hoặc kéo ra ngoài để loại bỏ"
+                    >
                       {/* Gói trà đã được đặt vào ngăn */}
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex items-center gap-1.5">
+                          <GripVertical className="w-3.5 h-3.5 text-gold-dark/60 group-hover/slot:text-gold-dark cursor-grab shrink-0" />
                           <span
                             className={`px-1.5 py-0.5 rounded-[2px] text-[8px] font-sans font-bold uppercase tracking-wider ${
                               packet.region === 'Bắc'
@@ -173,8 +210,11 @@ export const CustomKitBox: React.FC<CustomKitBoxProps> = ({
                         {packet.category} &bull; {packet.weight}
                       </p>
 
-                      <div className="flex items-center gap-1 mt-1 text-[9px] text-gold-dark font-serif truncate">
-                        <span>Hương: {packet.flavorNotes.join(', ')}</span>
+                      <div className="flex items-center justify-between gap-1 mt-1 text-[9px] text-gold-dark font-serif">
+                        <span className="truncate">Hương: {packet.flavorNotes.join(', ')}</span>
+                        <span className="text-[8px] font-sans text-teal-deep/60 uppercase tracking-tighter shrink-0 pl-1 group-hover/slot:text-teal-deep flex items-center gap-0.5 font-bold">
+                          <ArrowLeftRight className="w-2.5 h-2.5 inline" /> Đổi ngăn
+                        </span>
                       </div>
                     </div>
                   ) : (
@@ -204,6 +244,38 @@ export const CustomKitBox: React.FC<CustomKitBoxProps> = ({
                 </div>
               );
             })}
+
+            {/* Khu vực kéo thả để loại bỏ gói trà (khi đang kéo gói trà từ ngăn) */}
+            {activeDraggedSlot !== null && (
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'move';
+                  setIsOverRemoveZone(true);
+                }}
+                onDragLeave={() => setIsOverRemoveZone(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setIsOverRemoveZone(false);
+                  if (activeDraggedSlot !== null) {
+                    onRemovePacket(activeDraggedSlot);
+                    setLocalDraggedSlot(null);
+                  }
+                }}
+                className={`rounded-sm border-2 border-dashed p-3 text-center transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                  isOverRemoveZone
+                    ? 'bg-[#8A2418] border-red-400 text-white scale-[1.02] shadow-xl animate-pulse ring-2 ring-red-400/50'
+                    : 'bg-[#8A2418]/25 border-red-500/50 text-red-200 hover:bg-[#8A2418]/45'
+                }`}
+              >
+                <Trash2 className="w-4 h-4 text-red-300 animate-bounce" />
+                <span className="text-xs font-sans font-bold uppercase tracking-wider">
+                  {isOverRemoveZone
+                    ? 'Thả chuột để loại bỏ gói trà này'
+                    : 'Kéo thả vào đây để loại bỏ gói trà khỏi hộp'}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* CỘT PHẢI (7 PHẦN): NGĂN LỚN ĐỰNG SẴN BỘ TRANH DÂN GIAN & THIỆP QR (CỐ ĐỊNH THEO YÊU CẦU) */}
