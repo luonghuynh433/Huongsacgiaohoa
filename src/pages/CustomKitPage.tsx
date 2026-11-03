@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { motion } from 'framer-motion';
-import { Sparkles, RefreshCw, Wand2, Package, CheckCircle, ArrowRight } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Sparkles, RefreshCw, Wand2, Package, CheckCircle, ArrowRight, ArrowUp } from 'lucide-react';
 import { TEA_PACKETS_CATALOG } from '@/data/teaPacketsData';
 import { TeaPacketItem, KitOrderRecord } from '@/types/kit.types';
 import { CustomKitBox } from '@/components/kit/CustomKitBox';
@@ -15,9 +15,111 @@ export const CustomKitPage = () => {
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const [latestOrder, setLatestOrder] = useState<KitOrderRecord | null>(null);
 
+  // Trạng thái kéo thả & tự động cuộn trang
+  const [isDraggingAnyPacket, setIsDraggingAnyPacket] = useState(false);
+  const [draggedPacketName, setDraggedPacketName] = useState<string | null>(null);
+  const boxSectionRef = useRef<HTMLElement | null>(null);
+  const isDraggingRef = useRef<boolean>(false);
+  const animFrameRef = useRef<number | null>(null);
+  const lastClientYRef = useRef<number | null>(null);
+
   // Danh sách các gói trà đang có trong hộp
   const selectedTeas = slots.filter((p): p is TeaPacketItem => p !== null);
   const selectedIds = new Set(selectedTeas.map((t) => t.id));
+
+  // Dừng tự động cuộn và đặt lại cờ kéo thả
+  const stopAutoScroll = useCallback(() => {
+    isDraggingRef.current = false;
+    setIsDraggingAnyPacket(false);
+    setDraggedPacketName(null);
+    lastClientYRef.current = null;
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = null;
+    }
+  }, []);
+
+  // Vòng lặp tính toán và thực thi tự động cuộn mượt mà theo vị trí con trỏ khi kéo thả
+  const scrollTick = useCallback(() => {
+    if (!isDraggingRef.current) return;
+
+    const y = lastClientYRef.current;
+    if (y !== null && y >= 0) {
+      const EDGE_THRESHOLD_TOP = 220; // Vùng đệm 220px từ mép trên màn hình
+      const EDGE_THRESHOLD_BOTTOM = 180; // Vùng đệm 180px từ mép dưới màn hình
+      const MAX_SPEED = 28; // Tốc độ cuộn tối đa (px/khung hình)
+
+      if (y < EDGE_THRESHOLD_TOP) {
+        // Càng gần mép trên thì cuộn LÊN càng nhanh
+        const ratio = Math.max(0, (EDGE_THRESHOLD_TOP - y) / EDGE_THRESHOLD_TOP);
+        const speed = Math.max(4, Math.round(Math.pow(ratio, 1.2) * MAX_SPEED));
+        window.scrollBy({ top: -speed, behavior: 'auto' });
+      } else if (y > window.innerHeight - EDGE_THRESHOLD_BOTTOM) {
+        // Càng gần mép dưới thì cuộn XUỐNG càng nhanh
+        const bottomZone = window.innerHeight - EDGE_THRESHOLD_BOTTOM;
+        const ratio = Math.max(0, (y - bottomZone) / EDGE_THRESHOLD_BOTTOM);
+        const speed = Math.max(4, Math.round(Math.pow(ratio, 1.2) * MAX_SPEED));
+        window.scrollBy({ top: speed, behavior: 'auto' });
+      }
+    }
+
+    animFrameRef.current = requestAnimationFrame(scrollTick);
+  }, []);
+
+  // Đăng ký lắng nghe sự kiện dragover và drop trên toàn cửa sổ (window)
+  useEffect(() => {
+    const handleWindowDragOver = (e: DragEvent) => {
+      e.preventDefault();
+      lastClientYRef.current = e.clientY;
+
+      if (isDraggingRef.current && !animFrameRef.current) {
+        animFrameRef.current = requestAnimationFrame(scrollTick);
+      }
+    };
+
+    const handleWindowDrop = () => {
+      stopAutoScroll();
+    };
+
+    const handleWindowDragEnd = () => {
+      stopAutoScroll();
+    };
+
+    window.addEventListener('dragover', handleWindowDragOver, { capture: true, passive: false });
+    window.addEventListener('drop', handleWindowDrop, { capture: true });
+    window.addEventListener('dragend', handleWindowDragEnd, { capture: true });
+
+    return () => {
+      window.removeEventListener('dragover', handleWindowDragOver, { capture: true });
+      window.removeEventListener('drop', handleWindowDrop, { capture: true });
+      window.removeEventListener('dragend', handleWindowDragEnd, { capture: true });
+      if (animFrameRef.current) {
+        cancelAnimationFrame(animFrameRef.current);
+      }
+    };
+  }, [scrollTick, stopAutoScroll]);
+
+  // Bắt đầu kéo gói trà: Kích hoạt tự cuộn và trượt nhẹ tới Hộp Quà nếu hộp đang ở trên khuất màn hình
+  const handlePacketDragStart = (_e: React.DragEvent, packet: TeaPacketItem) => {
+    isDraggingRef.current = true;
+    setIsDraggingAnyPacket(true);
+    setDraggedPacketName(packet.name);
+
+    if (boxSectionRef.current) {
+      const rect = boxSectionRef.current.getBoundingClientRect();
+      if (rect.top < 60) {
+        boxSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+
+    if (!animFrameRef.current) {
+      animFrameRef.current = requestAnimationFrame(scrollTick);
+    }
+  };
+
+  const handlePacketDragEnd = () => {
+    stopAutoScroll();
+  };
 
   // Lọc gói trà theo miền
   const filteredPackets = TEA_PACKETS_CATALOG.filter((packet) => {
@@ -27,6 +129,7 @@ export const CustomKitPage = () => {
 
   // Xử lý kéo thả gói trà vào đúng vị trí ngăn (slotIndex: 0, 1, 2)
   const handleDropPacket = (slotIndex: number, packet: TeaPacketItem) => {
+    stopAutoScroll();
     setSlots((prev) => {
       const next = [...prev];
       // Nếu gói trà này đã ở ngăn khác, gỡ ở ngăn cũ
@@ -39,18 +142,24 @@ export const CustomKitPage = () => {
     });
   };
 
-  // Thêm nhanh gói trà vào ngăn trống đầu tiên
+  // Thêm nhanh gói trà vào ngăn trống đầu tiên (đồng thời tự cuộn đến hộp quà)
   const handleSelectPacket = (packet: TeaPacketItem) => {
     setSlots((prev) => {
       const firstEmptyIndex = prev.findIndex((p) => p === null);
       if (firstEmptyIndex === -1) {
-        // Hộp đã đầy 3 gói
         return prev;
       }
       const next = [...prev];
       next[firstEmptyIndex] = packet;
       return next;
     });
+
+    if (boxSectionRef.current) {
+      const rect = boxSectionRef.current.getBoundingClientRect();
+      if (rect.top < 60 || rect.bottom < 160) {
+        boxSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
   };
 
   // Gỡ gói trà ra khỏi ngăn
@@ -73,10 +182,34 @@ export const CustomKitPage = () => {
     const trung = TEA_PACKETS_CATALOG.find((p) => p.macroRegionCode === 'TRUNG');
     const nam = TEA_PACKETS_CATALOG.find((p) => p.macroRegionCode === 'NAM');
     setSlots([bac || null, trung || null, nam || null]);
+
+    if (boxSectionRef.current) {
+      boxSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   };
 
   return (
-    <div className="py-12 px-4 sm:px-6 max-w-7xl mx-auto space-y-12">
+    <div className="py-12 px-4 sm:px-6 max-w-7xl mx-auto space-y-12 relative">
+      {/* Cảnh báo / Hướng dẫn nổi khi đang kéo thả gói trà */}
+      <AnimatePresence>
+        {isDraggingAnyPacket && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, x: '-50%' }}
+            exit={{ opacity: 0, y: -20, x: '-50%' }}
+            className="fixed top-24 left-1/2 z-50 bg-[#0C241E]/95 text-[#FAF6EE] border-2 border-[#C5A059] px-5 py-2.5 rounded-full shadow-2xl flex items-center gap-2.5 pointer-events-none backdrop-blur-md"
+            style={{
+              boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
+            }}
+          >
+            <ArrowUp className="w-4 h-4 text-[#E5B94E] animate-bounce" />
+            <span className="text-xs font-serif font-bold">
+              Đang kéo {draggedPacketName ? `"${draggedPacketName}"` : 'gói trà'} &bull; Rê chuột lên trên để trang tự cuộn tới Hộp Quà
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* 1. Header Tiêu Đề */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -122,12 +255,13 @@ export const CustomKitPage = () => {
       </motion.div>
 
       {/* 2. KHU VỰC HỘP QUÀ VẬT LÝ 4 NGĂN (CHÍNH) */}
-      <section className="relative">
+      <section ref={boxSectionRef} id="physical-kit-box" className="relative scroll-mt-28">
         <CustomKitBox
           slots={slots}
           onDropPacket={handleDropPacket}
           onRemovePacket={handleRemovePacket}
           onOpenOrderModal={() => setIsOrderModalOpen(true)}
+          isDraggingAnyPacket={isDraggingAnyPacket}
         />
       </section>
 
@@ -142,7 +276,7 @@ export const CustomKitPage = () => {
               </span>
             </div>
             <p className="text-xs text-teal-deep/75 font-serif italic">
-              Bao bì giấy mỹ thuật cao cấp in họa tiết phong cảnh đất nước, trọng lượng 50g/gói.
+              Bao bì giấy mỹ thuật cao cấp in họa tiết phong cảnh đất nước, trọng lượng 50g/gói. Trang tự động cuộn khi bạn kéo gói trà.
             </p>
           </div>
 
@@ -230,6 +364,8 @@ export const CustomKitPage = () => {
                 isSelected={isSelected}
                 disabled={isBoxFull && !isSelected}
                 onSelect={handleSelectPacket}
+                onDragStart={handlePacketDragStart}
+                onDragEnd={handlePacketDragEnd}
               />
             );
           })}

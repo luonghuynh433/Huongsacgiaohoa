@@ -7,6 +7,7 @@ interface CustomKitBoxProps {
   onDropPacket: (slotIndex: number, packet: TeaPacketItem) => void;
   onRemovePacket: (slotIndex: number) => void;
   onOpenOrderModal: () => void;
+  isDraggingAnyPacket?: boolean;
 }
 
 export const CustomKitBox: React.FC<CustomKitBoxProps> = ({
@@ -14,6 +15,7 @@ export const CustomKitBox: React.FC<CustomKitBoxProps> = ({
   onDropPacket,
   onRemovePacket,
   onOpenOrderModal,
+  isDraggingAnyPacket = false,
 }) => {
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
@@ -126,7 +128,9 @@ export const CustomKitBox: React.FC<CustomKitBoxProps> = ({
                     packet
                       ? 'bg-[#FAF7F0] border border-[#C5A059] shadow-md text-teal-deep'
                       : isOver
-                      ? 'bg-[#153D32] border-2 border-[#5EEAD4] border-dashed shadow-inner scale-[1.02]'
+                      ? 'bg-[#153D32] border-2 border-[#5EEAD4] border-dashed shadow-inner scale-[1.02] ring-2 ring-[#5EEAD4]/40'
+                      : isDraggingAnyPacket
+                      ? 'bg-[#12362C] border-2 border-dashed border-[#E5B94E] shadow-lg animate-pulse ring-1 ring-[#C5A059]/40'
                       : 'bg-[#102B24] border border-dashed border-[#C5A059]/40 hover:border-[#C5A059] shadow-inner'
                   }`}
                 >
@@ -176,14 +180,24 @@ export const CustomKitBox: React.FC<CustomKitBoxProps> = ({
                   ) : (
                     /* Ngăn trà đang để trống */
                     <div className="flex flex-col items-center justify-center text-center my-auto py-2">
-                      <div className="w-7 h-7 rounded-full bg-[#184439] border border-[#C5A059]/40 flex items-center justify-center text-[#E5B94E] mb-1.5">
+                      <div className={`w-7 h-7 rounded-full flex items-center justify-center mb-1.5 transition-colors ${
+                        isOver
+                          ? 'bg-[#5EEAD4] text-[#0C241E]'
+                          : isDraggingAnyPacket
+                          ? 'bg-[#E5B94E] text-[#0C241E] animate-bounce'
+                          : 'bg-[#184439] border border-[#C5A059]/40 text-[#E5B94E]'
+                      }`}>
                         <Plus className="w-3.5 h-3.5" />
                       </div>
                       <span className="text-xs font-serif font-bold text-[#FAF6EE]/90">
-                        Ngăn Trà Số {idx + 1} (Trống)
+                        {isOver ? `Thả vào Ngăn ${idx + 1}` : `Ngăn Trà Số ${idx + 1} (Trống)`}
                       </span>
-                      <p className="text-[10px] text-[#C5A059] font-sans italic">
-                        Kéo thả gói trà vào đây hoặc bấm &quot;Thêm vào hộp&quot;
+                      <p className="text-[10px] text-[#C5A059] font-sans italic font-medium">
+                        {isOver
+                          ? 'Nhả chuột để đặt vào ngăn'
+                          : isDraggingAnyPacket
+                          ? '✨ Thả gói trà vào ngăn này ✨'
+                          : 'Kéo thả gói trà vào đây hoặc bấm "Thêm vào hộp"'}
                       </p>
                     </div>
                   )}

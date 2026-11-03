@@ -7,6 +7,8 @@ interface DraggableTeaPacketProps {
   isSelected: boolean;
   onSelect: (packet: TeaPacketItem) => void;
   disabled?: boolean;
+  onDragStart?: (e: React.DragEvent, packet: TeaPacketItem) => void;
+  onDragEnd?: (e: React.DragEvent) => void;
 }
 
 export const DraggableTeaPacket: React.FC<DraggableTeaPacketProps> = ({
@@ -14,11 +16,18 @@ export const DraggableTeaPacket: React.FC<DraggableTeaPacketProps> = ({
   isSelected,
   onSelect,
   disabled = false,
+  onDragStart,
+  onDragEnd,
 }) => {
   const handleDragStart = (e: React.DragEvent) => {
     e.dataTransfer.setData('application/json', JSON.stringify(packet));
     e.dataTransfer.setData('text/plain', packet.id);
     e.dataTransfer.effectAllowed = 'copy';
+    onDragStart?.(e, packet);
+  };
+
+  const handleDragEnd = (e: React.DragEvent) => {
+    onDragEnd?.(e);
   };
 
   const regionLabel =
@@ -39,6 +48,7 @@ export const DraggableTeaPacket: React.FC<DraggableTeaPacketProps> = ({
     <div
       draggable={!isSelected && !disabled}
       onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
       className={`relative rounded-sm border p-4 transition-all duration-300 select-none flex flex-col justify-between ${
         isSelected
           ? 'bg-cream-100/50 border-gold/30 opacity-60 cursor-not-allowed shadow-none'
