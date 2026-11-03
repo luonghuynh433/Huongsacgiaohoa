@@ -9,6 +9,7 @@ interface CustomKitBoxProps {
   onOpenOrderModal: () => void;
   isDraggingAnyPacket?: boolean;
   draggedFromSlotIndex?: number | null;
+  activeDraggedPacket?: { packet: TeaPacketItem; fromSlotIndex?: number } | null;
   onDragStartFromSlot?: (e: React.DragEvent, packet: TeaPacketItem, slotIndex: number) => void;
   onDragEndFromSlot?: () => void;
 }
@@ -20,6 +21,7 @@ export const CustomKitBox: React.FC<CustomKitBoxProps> = ({
   onOpenOrderModal,
   isDraggingAnyPacket = false,
   draggedFromSlotIndex = null,
+  activeDraggedPacket = null,
   onDragStartFromSlot,
   onDragEndFromSlot,
 }) => {
@@ -33,11 +35,16 @@ export const CustomKitBox: React.FC<CustomKitBoxProps> = ({
 
   const handleDragOver = (e: React.DragEvent, index: number) => {
     e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    setDragOverIndex(index);
+    e.dataTransfer.dropEffect = activeDraggedSlot !== null ? 'move' : 'copy';
+    if (dragOverIndex !== index) {
+      setDragOverIndex(index);
+    }
   };
 
-  const handleDragLeave = (index: number) => {
+  const handleDragLeave = (e: React.DragEvent, index: number) => {
+    if (e.currentTarget.contains(e.relatedTarget as Node)) {
+      return;
+    }
     if (dragOverIndex === index) {
       setDragOverIndex(null);
     }
@@ -45,27 +52,49 @@ export const CustomKitBox: React.FC<CustomKitBoxProps> = ({
 
   const handleDrop = (e: React.DragEvent, index: number) => {
     e.preventDefault();
+    e.stopPropagation();
     setDragOverIndex(null);
+
+    let packetToDrop: TeaPacketItem | null = null;
+    let fromSlot: number | undefined = undefined;
+
+    // 1. Phục hồi từ dataTransfer
     try {
-      const dataStr = e.dataTransfer.getData('application/json');
+      const dataStr = e.dataTransfer.getData('application/json') || e.dataTransfer.getData('text/plain');
       if (dataStr) {
         const parsed = JSON.parse(dataStr);
         if (parsed.fromSlotIndex !== undefined) {
-          onDropPacket(index, parsed.packet, parsed.fromSlotIndex);
-        } else {
-          onDropPacket(index, parsed);
+          fromSlot = parsed.fromSlotIndex;
+          packetToDrop = parsed.packet;
+        } else if (parsed.id) {
+          packetToDrop = parsed;
         }
       }
-    } catch (err) {
-      console.error('Lỗi nhận diện gói trà thả vào hộp:', err);
+    } catch {
+      // Bỏ qua lỗi parse, sử dụng fallback state
+    }
+
+    // 2. Dự phòng trực tiếp từ activeDraggedPacket nếu trình duyệt chặn dataTransfer
+    if (!packetToDrop && activeDraggedPacket) {
+      packetToDrop = activeDraggedPacket.packet;
+      fromSlot = activeDraggedPacket.fromSlotIndex;
+    }
+
+    if (packetToDrop) {
+      onDropPacket(index, packetToDrop, fromSlot);
     }
   };
 
   const handleSlotDragStart = (e: React.DragEvent, packet: TeaPacketItem, slotIdx: number) => {
     e.stopPropagation();
-    e.dataTransfer.setData('application/json', JSON.stringify({ packet, fromSlotIndex: slotIdx }));
-    e.dataTransfer.setData('text/plain', packet.id);
-    e.dataTransfer.effectAllowed = 'move';
+    const payload = JSON.stringify({ packet, fromSlotIndex: slotIdx });
+    try {
+      e.dataTransfer.setData('application/json', payload);
+    } catch {
+      // fallback
+    }
+    e.dataTransfer.setData('text/plain', payload);
+    e.dataTransfer.effectAllowed = 'all';
     setLocalDraggedSlot(slotIdx);
     onDragStartFromSlot?.(e, packet, slotIdx);
   };
@@ -150,7 +179,7 @@ export const CustomKitBox: React.FC<CustomKitBoxProps> = ({
                 <div
                   key={idx}
                   onDragOver={(e) => handleDragOver(e, idx)}
-                  onDragLeave={() => handleDragLeave(idx)}
+                  onDragLeave={(e) => handleDragLeave(e, idx)}
                   onDrop={(e) => handleDrop(e, idx)}
                   className={`relative min-h-[105px] rounded-sm p-3.5 transition-all duration-300 flex flex-col justify-between ${
                     packet
@@ -219,7 +248,7 @@ export const CustomKitBox: React.FC<CustomKitBoxProps> = ({
                     </div>
                   ) : (
                     /* Ngăn trà đang để trống */
-                    <div className="flex flex-col items-center justify-center text-center my-auto py-2">
+                    <div className="flex flex-col items-center justify-center text-center my-auto py-2 pointer-events-none">
                       <div className={`w-7 h-7 rounded-full flex items-center justify-center mb-1.5 transition-colors ${
                         isOver
                           ? 'bg-[#5EEAD4] text-[#0C241E]'

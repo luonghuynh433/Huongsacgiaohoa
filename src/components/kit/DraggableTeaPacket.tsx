@@ -20,9 +20,14 @@ export const DraggableTeaPacket: React.FC<DraggableTeaPacketProps> = ({
   onDragEnd,
 }) => {
   const handleDragStart = (e: React.DragEvent) => {
-    e.dataTransfer.setData('application/json', JSON.stringify(packet));
-    e.dataTransfer.setData('text/plain', packet.id);
-    e.dataTransfer.effectAllowed = 'copy';
+    const payload = JSON.stringify(packet);
+    try {
+      e.dataTransfer.setData('application/json', payload);
+    } catch {
+      // Một số trình duyệt chỉ cho phép đặt text/plain
+    }
+    e.dataTransfer.setData('text/plain', payload);
+    e.dataTransfer.effectAllowed = 'all';
     onDragStart?.(e, packet);
   };
 

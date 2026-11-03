@@ -19,6 +19,15 @@ export const CustomKitPage = () => {
   const [isDraggingAnyPacket, setIsDraggingAnyPacket] = useState(false);
   const [draggedFromSlotIndex, setDraggedFromSlotIndex] = useState<number | null>(null);
   const [draggedPacketName, setDraggedPacketName] = useState<string | null>(null);
+  const [activeDraggedPacket, setActiveDraggedPacket] = useState<{
+    packet: TeaPacketItem;
+    fromSlotIndex?: number;
+  } | null>(null);
+  const activeDraggedPacketRef = useRef<{
+    packet: TeaPacketItem;
+    fromSlotIndex?: number;
+  } | null>(null);
+
   const boxSectionRef = useRef<HTMLElement | null>(null);
   const isDraggingRef = useRef<boolean>(false);
   const animFrameRef = useRef<number | null>(null);
@@ -34,6 +43,8 @@ export const CustomKitPage = () => {
     setIsDraggingAnyPacket(false);
     setDraggedFromSlotIndex(null);
     setDraggedPacketName(null);
+    setActiveDraggedPacket(null);
+    activeDraggedPacketRef.current = null;
     lastClientYRef.current = null;
     if (animFrameRef.current) {
       cancelAnimationFrame(animFrameRef.current);
@@ -68,52 +79,44 @@ export const CustomKitPage = () => {
     animFrameRef.current = requestAnimationFrame(scrollTick);
   }, []);
 
-  // Đăng ký lắng nghe sự kiện dragover và drop trên toàn cửa sổ (window)
+  // Đăng ký lắng nghe sự kiện dragover và dragend trên cửa sổ
   useEffect(() => {
     const handleWindowDragOver = (e: DragEvent) => {
-      e.preventDefault();
-      lastClientYRef.current = e.clientY;
+      if (isDraggingRef.current) {
+        e.preventDefault();
+        lastClientYRef.current = e.clientY;
 
-      if (isDraggingRef.current && !animFrameRef.current) {
-        animFrameRef.current = requestAnimationFrame(scrollTick);
+        if (!animFrameRef.current) {
+          animFrameRef.current = requestAnimationFrame(scrollTick);
+        }
       }
-    };
-
-    const handleWindowDrop = () => {
-      stopAutoScroll();
     };
 
     const handleWindowDragEnd = () => {
       stopAutoScroll();
     };
 
-    window.addEventListener('dragover', handleWindowDragOver, { capture: true, passive: false });
-    window.addEventListener('drop', handleWindowDrop, { capture: true });
-    window.addEventListener('dragend', handleWindowDragEnd, { capture: true });
+    window.addEventListener('dragover', handleWindowDragOver);
+    window.addEventListener('dragend', handleWindowDragEnd);
 
     return () => {
-      window.removeEventListener('dragover', handleWindowDragOver, { capture: true });
-      window.removeEventListener('drop', handleWindowDrop, { capture: true });
-      window.removeEventListener('dragend', handleWindowDragEnd, { capture: true });
+      window.removeEventListener('dragover', handleWindowDragOver);
+      window.removeEventListener('dragend', handleWindowDragEnd);
       if (animFrameRef.current) {
         cancelAnimationFrame(animFrameRef.current);
       }
     };
   }, [scrollTick, stopAutoScroll]);
 
-  // Bắt đầu kéo gói trà từ kho danh mục (bên dưới): Kích hoạt tự cuộn và trượt nhẹ tới Hộp Quà nếu hộp đang ở trên
+  // Bắt đầu kéo gói trà từ kho danh mục (bên dưới)
   const handlePacketDragStart = (_e: React.DragEvent, packet: TeaPacketItem) => {
     isDraggingRef.current = true;
     setIsDraggingAnyPacket(true);
     setDraggedFromSlotIndex(null);
     setDraggedPacketName(packet.name);
-
-    if (boxSectionRef.current) {
-      const rect = boxSectionRef.current.getBoundingClientRect();
-      if (rect.top < 60) {
-        boxSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
-    }
+    const draggingData = { packet };
+    setActiveDraggedPacket(draggingData);
+    activeDraggedPacketRef.current = draggingData;
 
     if (!animFrameRef.current) {
       animFrameRef.current = requestAnimationFrame(scrollTick);
@@ -126,6 +129,9 @@ export const CustomKitPage = () => {
     setIsDraggingAnyPacket(true);
     setDraggedFromSlotIndex(slotIndex);
     setDraggedPacketName(packet.name);
+    const draggingData = { packet, fromSlotIndex: slotIndex };
+    setActiveDraggedPacket(draggingData);
+    activeDraggedPacketRef.current = draggingData;
 
     if (!animFrameRef.current) {
       animFrameRef.current = requestAnimationFrame(scrollTick);
@@ -144,20 +150,24 @@ export const CustomKitPage = () => {
 
   // Xử lý kéo thả gói trà vào đúng vị trí ngăn (slotIndex: 0, 1, 2)
   const handleDropPacket = (targetSlotIndex: number, packet: TeaPacketItem, fromSlotIndex?: number) => {
-    stopAutoScroll();
+    const effectiveFromSlot = fromSlotIndex ?? activeDraggedPacketRef.current?.fromSlotIndex;
 
     // Trường hợp 1: Kéo đổi ngăn giữa các ngăn trong hộp
-    if (fromSlotIndex !== undefined) {
-      if (fromSlotIndex === targetSlotIndex) return;
+    if (effectiveFromSlot !== undefined && effectiveFromSlot !== null) {
+      if (effectiveFromSlot === targetSlotIndex) {
+        stopAutoScroll();
+        return;
+      }
 
       setSlots((prev) => {
         const next = [...prev];
-        const fromPacket = next[fromSlotIndex];
+        const fromPacket = next[effectiveFromSlot];
         const toPacket = next[targetSlotIndex];
         next[targetSlotIndex] = fromPacket;
-        next[fromSlotIndex] = toPacket; // Hoán đổi vị trí hoặc để trống nếu toPacket ban đầu là null
+        next[effectiveFromSlot] = toPacket; // Hoán đổi vị trí hoặc để trống nếu toPacket ban đầu là null
         return next;
       });
+      stopAutoScroll();
       return;
     }
 
@@ -172,6 +182,7 @@ export const CustomKitPage = () => {
       next[targetSlotIndex] = packet;
       return next;
     });
+    stopAutoScroll();
   };
 
   // Thêm nhanh gói trà vào ngăn trống đầu tiên (đồng thời tự cuộn đến hộp quà)
@@ -307,6 +318,7 @@ export const CustomKitPage = () => {
           onOpenOrderModal={() => setIsOrderModalOpen(true)}
           isDraggingAnyPacket={isDraggingAnyPacket}
           draggedFromSlotIndex={draggedFromSlotIndex}
+          activeDraggedPacket={activeDraggedPacket}
           onDragStartFromSlot={handleDragStartFromSlot}
           onDragEndFromSlot={stopAutoScroll}
         />
